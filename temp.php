@@ -1,236 +1,150 @@
 <?php
-
 include 'config.php';
 include 'simple_html_dom.php';
 
-$base_url = 'https://www.fasken.com';
-$url = "https://faskenmartineau.org.coveo.com/rest/search/v2?organizationId=faskenmartineau";
-$spider_name = 'fasken-martineau-dumoulin';
+$url = 'https://c9s9o2ofpv-1.algolianet.com/1/indexes/*/queries?x-algolia-api-key=7ff1c4d30eee83d68ff7961455930a8f&x-algolia-application-id=C9S9O2OFPV';
+$spider_name = 'Simmons Simmon';
 
 $headers = [
     'Content-Type: application/json',
-    "Authorization: Bearer xx008a3fce-a0af-4aaf-ad0c-c9372161e8e8"
 ];
 
-$request_body = array(
-    "fieldsToInclude" => [ "author",
-        "language",
-        "urihash",
-        "objecttype",
-        "collection",
-        "source",
-        "permanentid",
-        "date",
-        "filetype",
-        "parents",
-        "ec_price",
-        "ec_name",
-        "ec_description",
-        "ec_brand",
-        "ec_category",
-        "ec_item_group_id",
-        "ec_shortdesc",
-        "ec_thumbnails",
-        "ec_images",
-        "ec_promo_price",
-        "ec_in_stock",
-        "ec_rating",
-        "lastname",
-        "relatedofficesname",
-        "imageurl",
-        "fullname",
-        "shortbiography",
-        "phone1",
-        "email",
-        "phone2",
-        "phone3",
-        "fax",
-        "tollfree",
-        "peoplerole",
-        "barjurisdiction",
-        "spokenlanguagename",
-        "relatedindustriesname",
-        "relatedmarketsname",
-        "relatedpracticesname",
-        "schoolnames",
-        "education",
-        "z95xtemplate",
-        "feminiz122xetitle"],
-    "sortCriteria" => "@lastname ascending",
-    "numberOfResults" => 30,
-    "firstResult" => 0,
-    "aq" => "(@z95xlanguage==\"en\")(@source==\"Website-CoveoAtomic-PRD-SC10\")(@z95xpath = \"27d34f3f-f921-4c2c-909a-40c3a40b9eb3\" AND NOT @z95xid == \"27D34F3FF9214C2C909A40C3A40B9EB3\")"
-);
-
-$total_count = 30;
-$i = 0;
+$profiles = [];
 $count = 0;
-$lawyers = [];
-for ($i = 0; $i < ceil($total_count / 30.0); $i++) {
 
-    if($i > 0) {
-        $request_body["firstResult"] = 30 * $i;
-    }
+for ($i = 0; $i < 18; $i++) {
     $context = stream_context_create([
         'http' => [
             'method' => 'POST',
             'header' => implode("\r\n", $headers),
-            'content' => json_encode($request_body)
+            'content' => json_encode(array(
+                'requests' => [
+                    array(
+                        "indexName" => "production_public_CvInfoFields",
+                        "params" => "filters=locale%3Aen-gb&hitsPerPage=10&distinct=true0&analytics=false&maxValuesPerFacet=100&query=&highlightPreTag=__ais-highlight__&highlightPostTag=__%2Fais-highlight__&page=" . $i . "&facets=%5B%22sectors.fields.title%22%2C%22services.fields.title%22%2C%22contact.fields.offices.fields.title%22%5D&tagFilters=&attributesToRetrieve=%5B%22parent%22%2C%22slug%22%5D"
+                    )
+                ]
+            ))
         ],
     ]);
-    $response = json_decode(file_get_contents($url, false, $context));
+    $response = file_get_contents($url, false, $context);
     
-    //check if the data is valid
-    if($response != null) {
-        //Get Total Number of Lawyers
-        if($i == 0) {
-            $total_count = $response->totalCount;
-        }
-        if($response->results) {
-            foreach($response->results as $item) {
-                //Get Profile
-                echo $count . "\n";
-                $lawyers[] = getProfile($item);
-                $count++;
-            }
-        }
-
-        //Save data per 30 profiles
-        if(count($lawyers) > 0){
-            // Convert the array to JSON format
-            $json = json_encode($lawyers);
-
-            // Specify the file path
-            $file_path = 'fasken-data/batch'. $i . '.json';
-
-            // Open the file for writing (create it if it doesn't exist)
-            $file_handle = fopen($file_path, 'w');
-
-            // Check if the file was opened successfully
-            if ($file_handle !== false) {
-                // Write the JSON string to the file
-                fwrite($file_handle, $json);
-
-                // Close the file handle
-                fclose($file_handle);
-                $lawyers = [];
-            } else {
-                // Output an error message if the file could not be opened
-                echo "Failed to open $file_path for writing.";
-            }
-        }
-        break;
+    $data = json_decode($response, true)['results'][0]['hits'];
+    foreach($data as $item) {
+        echo ++$count . "\n";
+        $profiles[] = getProfile($item);
     }
-    else {
-        //Failed to get data
-        break;
+
+    //Save data per 30 profiles
+    if(count($profiles) == 30){
+        // Convert the array to JSON format
+        $json = json_encode($profiles);
+
+        // Specify the file path
+        $file_path = 'simon-data/batch'.(($i + 1) / 3).'.json';
+
+        // Open the file for writing (create it if it doesn't exist)
+        $file_handle = fopen($file_path, 'w');
+
+        // Check if the file was opened successfully
+        if ($file_handle !== false) {
+            // Write the JSON string to the file
+            fwrite($file_handle, $json);
+
+            // Close the file handle
+            fclose($file_handle);
+            $profiles = [];
+        } else {
+            // Output an error message if the file could not be opened
+            echo "Failed to open $file_path for writing.";
+        }
     }
 }
 
-//linkedin education description
 function getProfile( $data ){
-    $name = @$data->title; 
-    $email = @$data->raw->email;
-    $full_address = $primary_address = "";
 
-    $phone_numbers = [];
-    if(@$data->raw->phone1) $phone_numbers[] = $data->raw->phone1;
-    if(@$data->raw->phone2) $phone_numbers[] = $data->raw->phone2;
-    if(@$data->raw->phone3) $phone_numbers[] = $data->raw->phone3;
+    $contact_info = $data["_highlightResult"]["contact"]["fields"][0];
 
-    $fax = [];
-    if(@$data->raw->fax) $phone_numbers[] = $data->raw->fax;
-
-    $bar_admissions = [];
-    if(@$data->raw->barjurisdiction) $bar_admissions = $data->raw->barjurisdiction;
-
-    $court_admissions = [];
-
-    $practice_areas = [];
-    if(@$data->raw->relatedpracticesname) $practice_areas = $data->raw->relatedpracticesname;
-
-    $acknowledgements = [];
-
-    $memberships = [];
-
-    $positions = [];
-    if(@$data->raw->peoplerole) $positions = $data->raw->peoplerole;
-
-    $langauges = [];
-    if(@$data->raw->spokenlanguagename) $langauges = $data->raw->spokenlanguagename;
-
-    $source = "";
-    if(@$data->clickUri) $source = $data->clickUri;
-
-    $photo_headshot = $photo = "";
-    if(@$data->raw->imageurl) $photo_headshot = $photo = $data->raw->imageurl;
-
-    $spider_name = "fasken-martineau-dumoulin";
-    $firm_name = "Fasken Martineau Dumoulin";
-
-
-    //Get data from click profile.
-    $url = $source;
-    $html = str_get_html(file_get_contents('http://137.184.158.149:3000/?api=getClick&useProxy=1&url='.urlencode($url)));
+    $name = $contact_info["firstName"]["value"] ." ". $contact_info["lastName"]["value"];
     
-    //Check if we fetched data correctly.
-    if($html != false) {
-        $linkedin = "";
-        try{
-            $linkedin = $html->find('.socials.bio-socials', 0)->find('.socials-list', 0)->find('li', 0)->find('a', 0)->href;
-            if(strpos($linkedin, "linkedin.com") == false) $linkedin = "";
-        } catch(Throwable $e) {}
-        
-        $vcard = "";
-        try{
-            global $base_url;
-            $vcard = $base_url . $html->find('a.vcard-icon', 0)->href;
-        } catch(Throwable $e) {
-        }
+    $email = $contact_info["emailAddress"]["value"];
 
-        $description = "";
-        try{
-            $description = @$html->find("#overview-content", 0)->plaintext;
-            //process description
-            $description = trim($description);
-            $description = rtrim($description);
-            $description = str_replace("\n","", $description);
-        } catch(Throwable $e) {}
+    $primary_address = $full_address = $contact_info["offices"][0]["fields"][0]["title"]["value"] . ", " . 
+        $contact_info["offices"][0]["fields"][0]["country"]["fields"][0]["title"]["value"];
 
-        $education = [];
-        try{
-            foreach($html->find(".events.education", 0)->find(".list")->find('li') as $item){
-                $university = $$item->find(".name", 0)->plaintext . ", " . $item->find(".description", 0)->plaintext;
-                $university = trim($university);
-                $university = rtrim($university);
-                $education[] = $university;
-            }
-        } catch(Throwable $e) {}
+    $description = $data["_highlightResult"]["overview"]["value"];
+     
+    $parent_id = $data['parent']['id'];
+    $slug = $data['slug'];
+
+    $url = "https://data.simmons-simmons.com/api/public";
+
+    $headers = [
+        'Content-Type: application/json',
+    ];
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => implode("\r\n", $headers),
+            'content' => json_encode(array(
+                array(
+                    "operationName" => "Detail",
+                    "variables" => array(
+                        "id" => $parent_id,
+                        "isRoot" => false,
+                        "published" => true,
+                        "slug" => $slug,
+                        "locale" => "en-gb",
+                        "locales" => [ "en-gb" ]
+                    ),
+                    "query" => "query Detail(\$id: String!, \$locale: String!) {\n  Detail: cVInfoFieldses(\n    where: {locale: {equals: \$locale}, cvInfo: {id: {equals: \$id}}}\n  ) {\n    contact {\n      fields(where: {locale: {equals: \$locale}}) {\n        emailAddress\n        firstName\n        id\n        image {\n          fields(where: {locale: {equals: \$locale}}) {\n            alt\n            caption\n            id\n            published\n            __typename\n          }\n          id\n          published\n          url\n          __typename\n        }\n        keywords\n        lastName\n        mobileNumber\n        offices {\n          officeInfoFields {\n            id\n            permissions\n            published\n            slug\n            title\n            __typename\n          }\n          id\n          published\n          __typename\n        }\n        officesOrder\n        phoneNumbers\n        published\n        salutation\n        slug\n        title\n        __typename\n      }\n      id\n      published\n      __typename\n    }\n    id\n    linkedInProfile {\n      fields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        title\n        __typename\n      }\n      id\n      published\n      url\n      __typename\n    }\n    managementTitle {\n      fields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        title\n        __typename\n      }\n      id\n      published\n      __typename\n    }\n    overview\n    ctaLink {\n      fields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        title\n        __typename\n      }\n      id\n      published\n      url\n      __typename\n    }\n    ctaEmailSubject\n    ctaColour\n    permissions\n    position {\n      fields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        title\n        __typename\n      }\n      id\n      published\n      __typename\n    }\n    published\n    sectors {\n      id\n      parentSectorFields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        sector {\n          id\n          sectorInfoFields(where: {locale: {equals: \$locale}}) {\n            id\n            published\n            slug\n            permissions\n            __typename\n          }\n          parentSectorFields(where: {locale: {equals: \$locale}}) {\n            id\n            published\n            sector {\n              id\n              sectorInfoFields(where: {locale: {equals: \$locale}}) {\n                id\n                published\n                slug\n                permissions\n                __typename\n              }\n              published\n              __typename\n            }\n            __typename\n          }\n          published\n          __typename\n        }\n        __typename\n      }\n      sectorInfoFields(where: {locale: {equals: \$locale}}) {\n        displayTitle\n        id\n        permissions\n        published\n        sectorInfo {\n          id\n          published\n          __typename\n        }\n        slug\n        title\n        __typename\n      }\n      fields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        title\n        __typename\n      }\n      id\n      published\n      __typename\n    }\n    sectorsOrder\n    services {\n      id\n      parentServiceFields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        service {\n          id\n          serviceInfoFields(where: {locale: {equals: \$locale}}) {\n            id\n            published\n            slug\n            permissions\n            __typename\n          }\n          parentServiceFields(where: {locale: {equals: \$locale}}) {\n            id\n            published\n            service {\n              id\n              serviceInfoFields(where: {locale: {equals: \$locale}}) {\n                id\n                published\n                slug\n                permissions\n                __typename\n              }\n              published\n              __typename\n            }\n            __typename\n          }\n          published\n          __typename\n        }\n        __typename\n      }\n      serviceInfoFields(where: {locale: {equals: \$locale}}) {\n        displayTitle\n        id\n        permissions\n        published\n        serviceInfo {\n          id\n          published\n          __typename\n        }\n        slug\n        title\n        __typename\n      }\n      fields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        title\n        __typename\n      }\n      id\n      published\n      __typename\n    }\n    servicesOrder\n    tagline\n    title\n    metaDescription\n    twitterProfile {\n      fields(where: {locale: {equals: \$locale}}) {\n        id\n        published\n        title\n        __typename\n      }\n      id\n      published\n      url\n      __typename\n    }\n    __typename\n  }\n  DetailTranslations: cVInfoFieldses(\n    where: {locale: {not: {equals: \$locale}}, cvInfo: {id: {equals: \$id}}, published: {equals: true}}\n  ) {\n    id\n    locale\n    overview\n    permissions\n    published\n    tagline\n    __typename\n  }\n}\n"
+                )
+            ))
+        ],
+    ]);
+
+    $response = json_decode(file_get_contents($url, false, $context));
+    $response = $response[0]->data;
+
+   
+    $phone_numbers = $response->Detail[0]->contact->fields[0]->phoneNumbers;
+   
+    $fax_numbers = array();
+
+    $linkedin = '';
+    if($response->Detail[0]->linkedInProfile != null) 
+        $linkedin = $response->Detail[0]->linkedInProfile->url;
+    
+
+    $practice_areas = array();
+    foreach($response->Detail[0]->sectors as $sector) {
+        $practice_areas[] = $sector->sectorInfoFields[0]->displayTitle;
     }
-    else{
-        //Failed to get data by clicking.
-        return array();
+
+    $positions = array();
+    $positions[] = $response->Detail[0]->position->fields[0]->title;
+
+    $firm_name = "Simmons Simmon";
+
+    $photo = $photo_headshot = '';
+    if( $response->Detail[0]->contact->fields[0]->image != null ) {
+        $photo = $photo_headshot = $response->Detail[0]->contact->fields[0]->image->url;
     }
     return array(
         "name" => $name,
         "email" => $email,
-        "vcard" => $vcard,
         "fullAddress" => $full_address,
         "primaryAddress" => $primary_address,
-        "education" => $education,
         "Linkedin" => $linkedin,
         "phone_numbers" => $phone_numbers,
-        "fax" => $fax,
-        "bar_admissions" => $bar_admissions,
-        "court_admissions" => $court_admissions,
+        "fax" => $fax_numbers,
         "practice_areas" => $practice_areas,
         "positions" => $positions,
         "source" => $url,
         "description" => $description,
-        "languages" => $langauges,
         "photo" => $photo,
         "photo_headshot" => $photo_headshot,
-        "firm_name" => $firm_name,
-        "spider_name" => $spider_name
+        "firm_name" => $firm_name
     );
 }
